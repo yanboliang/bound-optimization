@@ -1,9 +1,7 @@
 # Authors: Yanbo Liang ybliang8@gmail.com
 
 import numpy as np
-
 from scipy import optimize, sparse
-
 
 def _linear_loss_and_gradient(w, X, y, alpha, sample_weight=None):
 	# Note: Only handle w/o intercept currently.
@@ -33,16 +31,17 @@ def _linear_loss_and_gradient(w, X, y, alpha, sample_weight=None):
 	print("grad = " + str(grad))
 	return loss, grad
 
-
-class LinearRegressor():
+class LinearRegression():
 	
-	def __init__(self, max_iter=100, alpha=0.0001, lower_bound=-np.inf, upper_bound=np.inf, fit_intercept=False, tol=1e-06):
+	def __init__(self, max_iter=100, alpha=0.0001, lower_bound=None, upper_bound=None,
+				 fit_intercept=False, tol=1e-06, standardization=True):
 		self.max_iter = max_iter
 		self.alpha = alpha
 		self.lower_bound=lower_bound
 		self.upper_bound=upper_bound
 		self.fit_intercept = fit_intercept
 		self.tol = tol
+		self.standardization = standardization
 	
 	def fit(self, X, y, sample_weight=None):
 		if sample_weight is not None:
@@ -51,34 +50,43 @@ class LinearRegressor():
 		else:
 			sample_weight = np.ones_like(y)
 		
-		stdy = np.std(y)
-		stdX = np.std(X, axis=0)
+		yStd = np.std(y)
+		xStd = np.std(X, axis=0)
 
-		y = y / stdy
-		X = X / stdX
+		if self.standardization:
+			y = y / yStd
+			X = X / xStd
+			self.alpha = self.alpha / yStd
+
+		n_features = X.shape[1]
 		
 		if self.fit_intercept:
-			parameters = np.zeros(X.shape[1] + 1)
+			parameters = np.zeros(n_features + 1)
 		else:
-			parameters = np.zeros(X.shape[1])
-		#bounds = np.tile([-np.inf, np.inf], (parameters.shape[0], 1))
-		bounds = np.zeros([parameters.shape[0], 2])
+			parameters = np.zeros(n_features)
 		
-		for i in range(0, parameters.shape[0]):
-			bounds[i, 0] = self.lower_bound
-			bounds[i, 1] = self.upper_bound
-			bounds[i, 0] = bounds[i, 0] * stdX[i] / stdy
-			bounds[i, 1] = bounds[i, 1] * stdX[i] / stdy
+		if self.lower_bound is None:
+			self.lower_bound = [-np.inf] * n_features
+		if self.upper_bound is None:
+			self.upper_bound = [np.inf] * n_features
+
+		bounds = np.zeros([n_features, 2])
+		for i in range(0, n_features):
+			bounds[i, 0] = self.lower_bound[i] 
+			bounds[i, 1] = self.upper_bound[i]
+			if self.standardization:
+				bounds[i, 0] = bounds[i, 0] * xStd[i] / yStd
+				bounds[i, 1] = bounds[i, 1] * xStd[i] / yStd
 		try:
 			parameters, f, dict_ = optimize.fmin_l_bfgs_b(
 				_linear_loss_and_gradient, parameters,
-				args=(X, y, self.alpha / stdy, sample_weight),
+				args=(X, y, self.alpha, sample_weight),
 				maxiter=self.max_iter, tol=self.tol, bounds=bounds,
 				iprint=0)
 		except TypeError:
 			parameters, f, dict_ = optimize.fmin_l_bfgs_b(
 				_linear_loss_and_gradient, parameters,
-				args=(X, y, self.alpha / stdy, sample_weight),
+				args=(X, y, self.alpha, sample_weight),
 				bounds=bounds)
 		
 		self.n_iter_ = dict_.get('nit', None)
@@ -86,15 +94,15 @@ class LinearRegressor():
 			self.intercept_ = parameters[-1]
 		else:
 			self.intercept_ = 0.0
-		self.coef_ = parameters[:X.shape[1]] * stdy / stdX
+		self.coef_ = parameters[:n_features]
+		if self.standardization:
+			self.coef_ = self.coef_ * yStd / xStd
 		
 		return self
 
-
-lor = LinearRegressor(100, 0.05, -np.inf, np.inf, False) 
-X = np.array([[1,2],[-1.5,2.1],[-2.1,-2]])
-y = np.array([3, 1, 0])
-model = lor.fit(X, y)
-print(model.coef_)
-
-
+# Used for testing
+# X = np.array([[1,2],[-1.5,2.1],[-2.1,-2]])
+# y = np.array([3, 1, 0])
+# lir = LinearRegression(100, 0.05, -np.inf, np.inf, False) 
+# lir.fit(X, y)
+# print(lir.coef_)
