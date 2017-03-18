@@ -3,7 +3,7 @@
 import numpy as np
 from scipy import optimize, sparse
 
-def _linear_loss_and_gradient(w, X, y, alpha, sample_weight=None):
+def _linear_loss_and_gradient(w, X, y, alpha, sample_weight, xStd, standardization):
 	# Note: Only handle w/o intercept currently.
 	
 	_, n_features = X.shape
@@ -17,15 +17,23 @@ def _linear_loss_and_gradient(w, X, y, alpha, sample_weight=None):
 	diff = np.dot(X, w) - y
 	if fit_intercept:
 		linear_loss += intercept
+
+	if standardization:
+		l2reg = 0.5 * alpha * np.dot(w, w)
+		l2reg_grad = alpha * w
+	else:
+		_w = w / xStd
+		l2reg = 0.5 * alpha * np.dot(_w, _w)
+		l2reg_grad = alpha * _w / xStd
 	
-	loss = 0.5 * np.dot(diff, diff) / n_samples + 0.5 * alpha * np.dot(w, w)
+	loss = 0.5 * np.dot(diff, diff) / n_samples + l2reg
 	
 	if fit_intercept:
 		grad = np.zeros(n_features + 1)
 	else:
 		grad = np.zeros(n_features)
 	
-	grad[:n_features] += np.dot(X.T, diff) / n_samples + alpha * w 
+	grad[:n_features] += np.dot(X.T, diff) / n_samples + l2reg_grad
 	
 	print("loss = " + str(loss))
 	print("grad = " + str(grad))
@@ -53,10 +61,9 @@ class LinearRegression():
 		yStd = np.std(y)
 		xStd = np.std(X, axis=0)
 
-		if self.standardization:
-			y = y / yStd
-			X = X / xStd
-			self.alpha = self.alpha / yStd
+		y = y / yStd
+		X = X / xStd
+		self.alpha = self.alpha / yStd
 
 		n_features = X.shape[1]
 		
@@ -66,9 +73,9 @@ class LinearRegression():
 			parameters = np.zeros(n_features)
 		
 		if self.lower_bound is None:
-			self.lower_bound = [-np.inf] * n_features
+			self.lower_bound = np.full([n_features], -np.inf)
 		if self.upper_bound is None:
-			self.upper_bound = [np.inf] * n_features
+			self.upper_bound = np.full([n_features], np.inf)
 
 		bounds = np.zeros([n_features, 2])
 		for i in range(0, n_features):
@@ -80,13 +87,13 @@ class LinearRegression():
 		try:
 			parameters, f, dict_ = optimize.fmin_l_bfgs_b(
 				_linear_loss_and_gradient, parameters,
-				args=(X, y, self.alpha, sample_weight),
+				args=(X, y, self.alpha, sample_weight, xStd, self.standardization),
 				maxiter=self.max_iter, tol=self.tol, bounds=bounds,
 				iprint=0)
 		except TypeError:
 			parameters, f, dict_ = optimize.fmin_l_bfgs_b(
 				_linear_loss_and_gradient, parameters,
-				args=(X, y, self.alpha, sample_weight),
+				args=(X, y, self.alpha, sample_weight, xStd, self.standardization),
 				bounds=bounds)
 		
 		self.n_iter_ = dict_.get('nit', None)
@@ -94,9 +101,7 @@ class LinearRegression():
 			self.intercept_ = parameters[-1]
 		else:
 			self.intercept_ = 0.0
-		self.coef_ = parameters[:n_features]
-		if self.standardization:
-			self.coef_ = self.coef_ * yStd / xStd
+		self.coef_ = parameters[:n_features] * yStd / xStd
 		
 		return self
 
