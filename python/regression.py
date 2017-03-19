@@ -4,7 +4,6 @@ import numpy as np
 from scipy import optimize, sparse
 
 def _linear_loss_and_gradient(w, X, y, alpha, sample_weight, xStd, standardization):
-	# Note: Only handle w/o intercept currently.
 	
 	_, n_features = X.shape
 	fit_intercept = (n_features + 1 == w.shape[0])
@@ -16,7 +15,7 @@ def _linear_loss_and_gradient(w, X, y, alpha, sample_weight, xStd, standardizati
 	
 	diff = np.dot(X, w) - y
 	if fit_intercept:
-		linear_loss += intercept
+		diff += intercept
 
 	if standardization:
 		l2reg = 0.5 * alpha * np.dot(w, w)
@@ -30,6 +29,7 @@ def _linear_loss_and_gradient(w, X, y, alpha, sample_weight, xStd, standardizati
 	
 	if fit_intercept:
 		grad = np.zeros(n_features + 1)
+		grad[-1] = np.sum(diff) / n_samples
 	else:
 		grad = np.zeros(n_features)
 	
@@ -68,22 +68,28 @@ class LinearRegression():
 		n_features = X.shape[1]
 		
 		if self.fit_intercept:
-			parameters = np.zeros(n_features + 1)
+			n_parameters = n_features + 1
 		else:
-			parameters = np.zeros(n_features)
+			n_parameters = n_features
+		
+		parameters = np.zeros(n_parameters)
 		
 		if self.lower_bound is None:
-			self.lower_bound = np.full([n_features], -np.inf)
+			self.lower_bound = np.full([n_parameters], -np.inf)
 		if self.upper_bound is None:
-			self.upper_bound = np.full([n_features], np.inf)
+			self.upper_bound = np.full([n_parameters], np.inf)
 
-		bounds = np.zeros([n_features, 2])
-		for i in range(0, n_features):
+		bounds = np.zeros([n_parameters, 2])
+		for i in range(0, n_parameters):
 			bounds[i, 0] = self.lower_bound[i] 
 			bounds[i, 1] = self.upper_bound[i]
 			if self.standardization:
-				bounds[i, 0] = bounds[i, 0] * xStd[i] / yStd
-				bounds[i, 1] = bounds[i, 1] * xStd[i] / yStd
+				if i < n_features:
+					bounds[i, 0] = bounds[i, 0] * xStd[i] / yStd
+					bounds[i, 1] = bounds[i, 1] * xStd[i] / yStd
+				else:
+					bounds[i, 0] = bounds[i, 0] / yStd
+					bounds[i, 1] = bounds[i, 1] / yStd
 		try:
 			parameters, f, dict_ = optimize.fmin_l_bfgs_b(
 				_linear_loss_and_gradient, parameters,
@@ -98,7 +104,7 @@ class LinearRegression():
 		
 		self.n_iter_ = dict_.get('nit', None)
 		if self.fit_intercept:
-			self.intercept_ = parameters[-1]
+			self.intercept_ = parameters[-1] * yStd
 		else:
 			self.intercept_ = 0.0
 		self.coef_ = parameters[:n_features] * yStd / xStd
