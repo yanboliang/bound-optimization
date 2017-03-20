@@ -83,13 +83,13 @@ class LinearRegression():
 		for i in range(0, n_parameters):
 			bounds[i, 0] = self.lower_bound[i] 
 			bounds[i, 1] = self.upper_bound[i]
-			if self.standardization:
-				if i < n_features:
-					bounds[i, 0] = bounds[i, 0] * xStd[i] / yStd
-					bounds[i, 1] = bounds[i, 1] * xStd[i] / yStd
-				else:
-					bounds[i, 0] = bounds[i, 0] / yStd
-					bounds[i, 1] = bounds[i, 1] / yStd
+			
+			if i < n_features:
+				bounds[i, 0] = bounds[i, 0] * xStd[i] / yStd
+				bounds[i, 1] = bounds[i, 1] * xStd[i] / yStd
+			else:		
+				bounds[i, 0] = bounds[i, 0] / yStd
+				bounds[i, 1] = bounds[i, 1] / yStd
 		try:
 			parameters, f, dict_ = optimize.fmin_l_bfgs_b(
 				_linear_loss_and_gradient, parameters,
