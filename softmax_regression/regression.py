@@ -5,37 +5,6 @@ from scipy import optimize, sparse
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.extmath import (logsumexp, safe_sparse_dot, squared_norm)
 
-def _multinomial_loss(w, X, Y, alpha, sample_weight, xStd, standardization):
-	_, n_features = X.shape
-	_, n_classes = Y.shape
-	fit_intercept = (w.size == n_classes * (n_features + 1))
-	w = w.reshape(n_classes, -1)
-	n_samples = np.sum(sample_weight)
-	sample_weight = sample_weight[:, np.newaxis]
-	if fit_intercept:
-		intercept = w[:, -1]
-		w = w[:, :-1]
-	else:
-		intercept = 0
-	p = safe_sparse_dot(X, w.T)
-	p += intercept
-	p -= logsumexp(p, axis=1)[:, np.newaxis]
-
-	if standardization:
-		_w = w.ravel()
-		l2reg = 0.5 * alpha * safe_sparse_dot(_w, _w)
-	else:
-		_w = w.ravel()
-		xStd = np.tile(xStd, n_classes)
-		_w = _w / xStd
-		l2reg = 0.5 * alpha * squared_norm(_w)
-
-	loss = -(sample_weight * Y * p).sum()
-	loss += l2reg
-	#print("loss = " + str(loss))
-	p = np.exp(p, p)
-	return loss, p, w
-
 def _multinomial_loss_and_gradient(w, X, Y, alpha, sample_weight, xStd, standardization):
 	
 	#print(str(w))
