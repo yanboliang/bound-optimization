@@ -3,7 +3,9 @@
 import numpy as np
 from scipy import optimize, sparse
 from sklearn.preprocessing import LabelBinarizer
+from sklearn.utils import check_consistent_length
 from sklearn.utils.extmath import (logsumexp, safe_sparse_dot, squared_norm)
+from statsmodels.stats.weightstats import DescrStatsW
 
 def _multinomial_loss_and_gradient(w, X, Y, alpha, sample_weight, xStd, standardization):
 	
@@ -65,8 +67,7 @@ class SoftmaxRegression():
 		else:
 			sample_weight = np.ones_like(y)
 		
-		xStd = np.std(X, axis=0)
-		xStd = xStd * np.sqrt(y.size / (y.size - 1.0))
+		xStd = DescrStatsW(X, weights = sample_weight, ddof=1).std
 
 		X = X / xStd
 
