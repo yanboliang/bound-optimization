@@ -7,7 +7,7 @@ from sklearn.utils.extmath import (logsumexp, safe_sparse_dot, squared_norm)
 
 def _multinomial_loss_and_gradient(w, X, Y, alpha, sample_weight, xStd, standardization):
 	
-	#print(str(w))
+	# print("coefficients = " + str(w))
 	_, n_features = X.shape
 	_, n_classes = Y.shape
 	n_samples = np.sum(sample_weight)
@@ -15,7 +15,7 @@ def _multinomial_loss_and_gradient(w, X, Y, alpha, sample_weight, xStd, standard
 	fit_intercept = (w.size == n_classes * (n_features + 1))
 	grad = np.zeros((n_classes, n_features + bool(fit_intercept)))
 
-    # Calculate loss value
+	# Calculate loss value
 	w = w.reshape(n_classes, -1)
 	
 	if fit_intercept:
@@ -23,35 +23,25 @@ def _multinomial_loss_and_gradient(w, X, Y, alpha, sample_weight, xStd, standard
 		w = w[:, :-1]
 	else:
 		intercept = 0
-	p = safe_sparse_dot(X, w.T)
-	p += intercept
+	p = safe_sparse_dot(X, w.T) + intercept
 	p -= logsumexp(p, axis=1)[:, np.newaxis]
-
+	
 	if standardization:
-		_w = w.ravel()
-		l2reg = 0.5 * alpha * safe_sparse_dot(_w, _w)
-	else:
-		_w = w.ravel()
-		xStd = np.tile(xStd, n_classes)
-		_w = _w / xStd
-		l2reg = 0.5 * alpha * squared_norm(_w)
-
-	loss = -(sample_weight * Y * p).sum() + l2reg
-	#print("loss = " + str(loss))
-	p = np.exp(p, p)
-
-	# Calculate gradient array
-	diff = sample_weight * (p - Y)
-
-	if standardization:
+		l2reg = 0.5 * alpha * squared_norm(w)
 		l2reg_grad = alpha * w
 	else:
-		xStd = np.tile(xStd, n_classes)
 		_w = w / xStd
+		l2reg = 0.5 * alpha * squared_norm(_w)
 		l2reg_grad = alpha * _w / xStd
 
-	grad[:, :n_features] = safe_sparse_dot(diff.T, X) + l2reg_grad
-	#print(str(grad))
+	loss = -(sample_weight * Y * p).sum() + l2reg
+	# print("loss = " + str(loss))
+
+	diff = sample_weight * (np.exp(p) - Y)
+
+	grad[:, :n_features] = safe_sparse_dot(diff.T, X)
+	grad[:, :n_features] += l2reg_grad
+	# print("grad = " + str(grad))
 	if fit_intercept:
 		grad[:, -1] = diff.sum(axis=0)
 	return loss, grad.ravel()
@@ -133,16 +123,28 @@ class SoftmaxRegression():
 
 		return self
 
-# Used for testing
-# X = np.array([[1.0,2.0],[-1.5,2.1],[-2.1,-2.0]])
-# y = np.array([1.0, 1.0, 0.0])
-# lor = LogisticRegression(100, 0.5, [-np.inf, -np.inf, -np.inf], [np.inf, np.inf, np.inf], True, 1e-6, False)
-# lor.fit(X, y)
-# print("coef: %s intercept: %s" % (lor.coef_, lor.intercept_))
+# Test _multinomial_loss_and_gradient
+# n_samples, n_features, n_classes = 4, 2, 3
+# n_classes = 3
+# X = np.array([[1.1, 2.2], [2.2, -4.4], [3.3, -2.2], [1.1, 1.1]])
+# y = np.array([0, 1, 2, 0])
+# lbin = LabelBinarizer()
+# Y_bin = lbin.fit_transform(y)
 
-# Test _logistic_loss_and_gradient
-# sample_weight = np.ones_like(y)
-# xStd = np.std(X, axis=0)
-# xStd = np.array([1, 1])
-# (loss, grad) = _logistic_loss_and_gradient(np.array([1.0, 2.0]), X / xStd, y, 0.0, sample_weight, xStd, True)
-# print("loss: %f, grad: %s" % (loss, grad))
+# coefficients = np.array([[0.1, 0.2, 0.3], [1.1, 1.2, -1.3]])
+# intercept = np.array([1., 0, -.2])
+# sample_weights = np.array([0.8, 1, 1, 0.8])
+
+# prediction = np.dot(X, coefficients) + intercept
+# logsumexp_prediction = logsumexp(prediction, axis=1)
+# p = prediction - logsumexp_prediction[:, np.newaxis]
+# loss_1 = -(sample_weights[:, np.newaxis] * p * Y_bin).sum()
+# diff = sample_weights[:, np.newaxis] * (np.exp(p) - Y_bin)
+# grad_1 = np.dot(X.T, diff)
+
+# weights_intercept = np.vstack((coefficients, intercept)).T.ravel()
+# loss_2, grad_2 = _multinomial_loss_and_gradient(weights_intercept, X, Y_bin, 0.0, sample_weights, X, True)
+# grad_2 = grad_2.reshape(n_classes, -1)
+# grad_2 = grad_2[:, :-1].T
+# print(loss_1, loss_2)
+# print(grad_1, grad_2)
