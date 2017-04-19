@@ -2,6 +2,8 @@
 
 import numpy as np
 from scipy import optimize, sparse
+from sklearn.utils import check_consistent_length
+from statsmodels.stats.weightstats import DescrStatsW
 
 def _logistic_loss_and_gradient(w, X, y, alpha, sample_weight, xStd, standardization):
 	
@@ -18,9 +20,9 @@ def _logistic_loss_and_gradient(w, X, y, alpha, sample_weight, xStd, standardiza
 		margin += intercept
 	margin = -margin
 	
-	multiplier = 1.0 / (1.0 + np.exp(margin)) - y
+	multiplier = sample_weight * (1.0 / (1.0 + np.exp(margin)) - y)
 
-	loss = np.sum(np.log(1.0 + np.exp(margin)) + margin * (y - 1.0)) / n_samples	
+	loss = np.sum(sample_weight * (np.log(1.0 + np.exp(margin)) + margin * (y - 1.0))) / n_samples	
 
 	if standardization:
 		l2reg = 0.5 * alpha * np.dot(w, w)
@@ -63,8 +65,7 @@ class LogisticRegression():
 		else:
 			sample_weight = np.ones_like(y)
 		
-		xStd = np.std(X, axis=0)
-		xStd = xStd * np.sqrt(y.size / (y.size - 1.0))
+		xStd = DescrStatsW(X, weights = sample_weight, ddof=1).std
 
 		X = X / xStd
 
