@@ -34,16 +34,16 @@ def _multinomial_loss_and_gradient(w, X, Y, alpha, sample_weight, xStd, standard
 		l2reg = 0.5 * alpha * squared_norm(_w)
 		l2reg_grad = alpha * _w / xStd
 
-	loss = -(sample_weight * Y * p).sum() + l2reg
+	loss = -(sample_weight * Y * p).sum() / n_samples + l2reg
 	# print("loss = " + str(loss))
 
 	diff = sample_weight * (np.exp(p) - Y)
 
-	grad[:, :n_features] = safe_sparse_dot(diff.T, X)
+	grad[:, :n_features] = safe_sparse_dot(diff.T, X) / n_samples
 	grad[:, :n_features] += l2reg_grad
 	# print("grad = " + str(grad))
 	if fit_intercept:
-		grad[:, -1] = diff.sum(axis=0)
+		grad[:, -1] = diff.sum(axis=0) / n_samples
 	return loss, grad.ravel()
 
 class SoftmaxRegression():
